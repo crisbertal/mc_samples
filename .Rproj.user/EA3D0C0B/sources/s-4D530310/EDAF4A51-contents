@@ -1,0 +1,169 @@
+
+for (z in 1:15) {
+
+library(sp)
+library(rgdal)
+library(raster)
+library(gstat)
+library(plotKML)
+library(fBasics)
+library(Rcmdr)
+library(soiltexture)
+library(geoR)
+library(rgeos)
+library(gridExtra)
+library(nortest)
+
+#data import
+setwd("C:/Users/Usuario/Universidad de C?rdoba/Paper Andaluc?a - General/Capas/Qgis")
+T_data <- read.table(paste("data",z,".csv",sep = ""), header = TRUE, sep = ",", na.strings = "NA", dec = ".", strip.white = TRUE)
+
+#spatial conversion
+T_data.xy= T_data[c("X","Y")]
+coordinates(T_data.xy) <- ~X+Y
+class(T_data.xy)
+WGS84 <- "+proj=utm +zone=30 +ellps=WGS84 +datum=WGS84 +units=m +no_defs +towgs84=0,0,0"
+T_data.pts <- SpatialPointsDataFrame(coordinates(T_data.xy), T_data, proj4string = CRS(WGS84),match.ID = TRUE)
+
+#load the layers
+setwd("C:/Users/Usuario/Universidad de C?rdoba/Paper Andaluc?a - General/Capas/Qgis/layers")
+clc_grid <- readGDAL("clc_12.sdat")
+
+# from DEM
+clc_grid$clc_12 <- clc_grid$band1
+clc_grid$band1 <- NULL
+clc_grid$clc_18 <- readGDAL("clc_18.sdat")$band1
+clc_grid$ASP <- readGDAL("aspect.sdat")$band1
+clc_grid$clc_00 <- readGDAL("clc_00.sdat")$band1
+clc_grid$clc_06 <- readGDAL("clc_06.sdat")$band1
+clc_grid$clc_90 <- readGDAL("clc_90.sdat")$band1
+clc_grid$incendios <- readGDAL("incendios.sdat")$band1
+clc_grid$mde <- readGDAL("mde.sdat")$band1
+clc_grid$roads <- readGDAL("roads.sdat")$band1
+clc_grid$slope <- readGDAL("slope.sdat")$band1
+
+# check the grid and data system
+proj4string(clc_grid) <- CRS(WGS84)
+identicalCRS(T_data.pts, clc_grid)
+
+# overlay data with layers
+T_data.pts.ov <- over(T_data.pts,clc_grid)
+T_data.pts$clc_12 <- T_data.pts.ov$clc_12
+T_data.pts$clc_18 <- T_data.pts.ov$clc_18
+T_data.pts$aspect <- T_data.pts.ov$ASP
+T_data.pts$clc_00 <- T_data.pts.ov$clc_00
+T_data.pts$clc_06 <- T_data.pts.ov$clc_06
+T_data.pts$clc_90 <- T_data.pts.ov$clc_90
+T_data.pts$incendios <- T_data.pts.ov$incendios
+T_data.pts$mde <- T_data.pts.ov$mde
+T_data.pts$roads <- T_data.pts.ov$roads
+T_data.pts$slope <- T_data.pts.ov$slope
+
+# create a dataframe for anova or statistical analysis
+T_data.pts_DF <- as.data.frame(T_data.pts)
+
+# subset the data set needed
+T_data.pts_UTM_DF <- subset(T_data.pts_DF, select= c(X,Y,clc_12,clc_18,clc_00,clc_06,clc_90,aspect,incendios,roads,mde,slope,id))
+
+#Columna incendios a 0-1
+data <- T_data.pts_UTM_DF
+
+
+data$fire[is.na(data$incendios)] <- 0
+data$fire[data$incendios > 0] <- 1
+
+data <- subset(data, select = c(X, Y,aspect, mde, slope, clc_90, clc_00, clc_06, clc_12, clc_18, roads, fire, incendios))
+data$clc_00[is.na(data$clc_00)] <- 0
+data$clc_90[is.na(data$clc_90)] <- 0
+data$clc_06[is.na(data$clc_06)] <- 0
+data$clc_12[is.na(data$clc_12)] <- 0
+data$clc_18[is.na(data$clc_18)] <- 0
+data$incendios[is.na(data$incendios)] <- 0
+
+#Reclassify clc
+tabla <- read.table("C:/Users/Usuario/Universidad de C?rdoba/Paper Andaluc?a - General/Capas/Qgis/layers/reclasificar.csv", header = TRUE, sep = ";", na.strings = "NA", dec = ",", strip.white = TRUE)
+
+n_iter <- nrow(data)
+
+for (i in 1:n_iter) {
+  this.data <- data[i,]
+  for (o in 1:length(tabla$Rowid)) {
+      this.tabla <- tabla[o,]
+      if(this.data$clc_90 >= this.tabla$FROM & this.data$clc_90 < this.tabla$TO) {
+        data$clc_90[i] <- this.tabla$OUT
+      } 
+  }
+  if (i %% 1000 == 0) {
+    print(paste("Va por la fila",i))
+  }
+}
+
+write.table(data, paste("supertabla",z,".csv",sep = ""), sep=",", dec=".", col.names=TRUE)
+
+
+for (i in 1:length(data$X)) {
+  this.data <- data[i,]
+  for (o in 1:length(tabla$Rowid)) {
+    this.tabla <- tabla[o,]
+    if(this.data$clc_00 >= this.tabla$FROM & this.data$clc_00 < this.tabla$TO) {
+      data$clc_00[i] <- this.tabla$OUT
+    } 
+  }
+  if (i %% 1000 == 0) {
+    print(paste("Va por la fila",i))
+  }
+}
+
+write.table(data, paste("supertabla",z,".csv",sep = ""), sep=",", dec=".", col.names=TRUE)
+
+for (i in 1:length(data$X)) {
+  this.data <- data[i,]
+  for (o in 1:length(tabla$Rowid)) {
+    this.tabla <- tabla[o,]
+    if(this.data$clc_06 >= this.tabla$FROM & this.data$clc_06 < this.tabla$TO) {
+      data$clc_06[i] <- this.tabla$OUT
+    } 
+  }
+  if (i %% 1000 == 0) {
+    print(paste("Va por la fila",i))
+  }
+}
+
+write.table(data, paste("supertabla",z,".csv",sep = ""), sep=",", dec=".", col.names=TRUE)
+
+
+ #Columna clc antes incendio
+data$before[data$incendios >= 1975 & data$incendios <= 1990] <- NA
+data$before[data$incendios >= 1991 & data$incendios <= 2000] <- paste(data$clc_90[data$incendios >= 1991 & data$incendios <= 2000])
+data$before[data$incendios >= 2001 & data$incendios <= 2006] <- paste(data$clc_00[data$incendios >= 2001 & data$incendios <= 2006])
+data$before[data$incendios >= 2007 & data$incendios <= 2012] <- paste(data$clc_06[data$incendios >= 2007 & data$incendios <= 2012])
+data$before[data$incendios >= 2013 & data$incendios <= 2018] <- paste(data$clc_12[data$incendios >= 2013 & data$incendios <= 2018])
+data$before[data$incendios >= 2019 & data$incendios <= 2020] <- paste(data$clc_18[data$incendios >= 2019 & data$incendios <= 2020])
+
+
+#Columna clc despu?s incendio
+data$after[data$incendios >= 1975 & data$incendios <= 1990] <- paste(data$clc_90[data$incendios >= 1975 & data$incendios <= 1990])
+data$after[data$incendios >= 1991 & data$incendios <= 2000] <- paste(data$clc_00[data$incendios >= 1991 & data$incendios <= 2000])
+data$after[data$incendios >= 2001 & data$incendios <= 2006] <- paste(data$clc_06[data$incendios >= 2001 & data$incendios <= 2006])
+data$after[data$incendios >= 2007 & data$incendios <= 2012] <- paste(data$clc_12[data$incendios >= 2007 & data$incendios <= 2012])
+data$after[data$incendios >= 2013 & data$incendios <= 2018] <- paste(data$clc_18[data$incendios >= 2013 & data$incendios <= 2018])
+data$after[data$incendios >= 2019 & data$incendios <= 2020] <- NA
+
+#Reclasificaci?n Orientaci?n
+data$Asp_class[data$aspect >= 0 & data$aspect <22.5] <- "N"
+data$Asp_class[data$aspect >= 22.5 & data$aspect <67.5] <- "NE"
+data$Asp_class[data$aspect >= 67.5 & data$aspect <112.5] <- "E"
+data$Asp_class[data$aspect >= 112.5 & data$aspect <157.5] <- "SE"
+data$Asp_class[data$aspect >= 157.5 & data$aspect <202.5] <- "S"
+data$Asp_class[data$aspect >= 202.5 & data$aspect <247.5] <- "SW"
+data$Asp_class[data$aspect >= 247.5 & data$aspect <292.5] <- "W"
+data$Asp_class[data$aspect >= 292.5 & data$aspect <337.5] <- "NW"
+data$Asp_class[data$aspect >= 337.5 & data$aspect <360] <- "N"
+
+data <- subset(data, select = c(X, Y, Asp_class, mde, slope, clc_90, clc_00, clc_06, clc_12, clc_18, roads, incendios, fire, before, after))
+
+write.table(data, paste("supertabla",z,".csv",sep = ""), sep=",", dec=".", col.names=TRUE)
+
+
+}
+ 

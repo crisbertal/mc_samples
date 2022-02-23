@@ -1,0 +1,9 @@
+roi
+
+samples
+
+*.tif*
+*.shp
+*.prj
+*.shx
+*.dbf
